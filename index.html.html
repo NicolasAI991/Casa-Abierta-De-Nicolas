@@ -1,0 +1,195 @@
+!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Juego de Pinball</title>
+  <style>
+    body {
+      background-color: #222;
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="pinballUI" style="text-align:center;margin-top:10px;"></div>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Parámetros del juego
+    let ball = { x: 400, y: 300, radius: 10, vx: 3, vy: 0 };
+    const gravity = 0.2;
+    const friction = 0.99;
+    // Máxima velocidad permitida (para vx y vy)
+    const maxSpeed = 19;  // Limita la velocidad a 5 unidades (puedes ajustar este valor)
+
+    // Definición de flippers (simplificados)
+    const flipperLeft = { pivotX: 300, pivotY: 550, width: 80, height: 15, angle: 0 };
+    const flipperRight = { pivotX: 500, pivotY: 550, width: 80, height: 15, angle: 0 };
+
+    // Contador de veces que la bola toca el piso
+    let floorHits = 0;
+    let floorTouched = false; // para evitar contar múltiples veces en el mismo toque
+    let score = 0;
+    let pinballRunning = true;
+
+    // Función para reiniciar el juego
+    function resetPinball() {
+      ball = { x: 400, y: 300, radius: 10, vx: 3, vy: 0 };
+      floorHits = 0;
+      score = 0;
+      pinballRunning = true;
+      document.getElementById('pinballUI').innerHTML = "";
+      gameLoop();
+    }
+
+    // Función para dibujar la bola
+    function drawBall() {
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fillStyle = '#FF4081';
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    // Función para dibujar los flippers
+    function drawFlippers() {
+      // Flipper izquierdo
+      ctx.save();
+      ctx.translate(flipperLeft.pivotX, flipperLeft.pivotY);
+      ctx.rotate(flipperLeft.angle);
+      ctx.fillStyle = '#00FF00';
+      ctx.fillRect(0, -flipperLeft.height / 2, flipperLeft.width, flipperLeft.height);
+      ctx.restore();
+      // Flipper derecho
+      ctx.save();
+      ctx.translate(flipperRight.pivotX, flipperRight.pivotY);
+      ctx.rotate(-flipperRight.angle);
+      ctx.fillStyle = '#00FF00';
+      ctx.fillRect(-flipperRight.width, -flipperRight.height / 2, flipperRight.width, flipperRight.height);
+      ctx.restore();
+    }
+
+    // Función para limitar la velocidad de la bola
+    function limitSpeed() {
+      if (Math.abs(ball.vx) > maxSpeed) {
+        ball.vx = Math.sign(ball.vx) * maxSpeed;
+      }
+      if (Math.abs(ball.vy) > maxSpeed) {
+        ball.vy = Math.sign(ball.vy) * maxSpeed;
+      }
+    }
+
+    // Función para verificar colisión aproximada con los flippers y potenciar la bola
+    function checkFlipperCollision() {
+      // Colisión con flipper izquierdo
+      if (
+        ball.y + ball.radius >= flipperLeft.pivotY - 10 && ball.y + ball.radius <= flipperLeft.pivotY + 10 &&
+        ball.x >= flipperLeft.pivotX && ball.x <= flipperLeft.pivotX + flipperLeft.width
+      ) {
+        ball.vy = -Math.abs(ball.vy) * 1.5;
+      }
+      // Colisión con flipper derecho
+      if (
+        ball.y + ball.radius >= flipperRight.pivotY - 10 && ball.y + ball.radius <= flipperRight.pivotY + 10 &&
+        ball.x >= flipperRight.pivotX - flipperRight.width && ball.x <= flipperRight.pivotX
+      ) {
+        ball.vy = -Math.abs(ball.vy) * 1.5;
+      }
+    }
+
+    // Actualización de la física básica de la bola
+    function updatePinball() {
+      ball.vy += gravity;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Rebote en paredes laterales
+      if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+        ball.vx = -ball.vx;
+        score += 10;
+      }
+      // Rebote en el techo
+      if (ball.y - ball.radius < 0) {
+        ball.vy = -ball.vy;
+      }
+      
+      // Rebote en el piso y contar toques
+      if (ball.y + ball.radius > canvas.height) {
+        if (!floorTouched) {
+          floorHits++;
+          floorTouched = true;
+          if (floorHits >= 21) {
+            pinballRunning = false;
+            gameOver();
+            return;
+          }
+        }
+        ball.y = canvas.height - ball.radius;
+        ball.vy = -ball.vy * friction;
+        ball.vx *= friction;
+      } else {
+        floorTouched = false;
+      }
+
+      // Verificar colisiones con los flippers
+      checkFlipperCollision();
+
+      // Limitar la velocidad para que no supere el 25% (usando nuestro límite definido)
+      limitSpeed();
+    }
+
+    // Función para mostrar el game over
+    function gameOver() {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = '48px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+      document.getElementById('pinballUI').innerHTML = '<button onclick="resetPinball()">Reintentar</button><p>Puntos: ' + score + '</p>';
+    }
+
+    // Función para dibujar la puntuación
+    function drawScore() {
+      ctx.fillStyle = '#fff';
+      ctx.font = '20px sans-serif';
+      ctx.fillText('Puntos: ' + score, 10, 30);
+    }
+
+    // Bucle del juego
+    function gameLoop() {
+      if (!pinballRunning) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      updatePinball();
+      drawBall();
+      drawFlippers();
+      drawScore();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Controles de flippers con teclas de flecha
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "ArrowLeft") { flipperLeft.angle = -0.5; }
+      if (e.key === "ArrowRight") { flipperRight.angle = 0.5; }
+    });
+    document.addEventListener("keyup", function(e) {
+      if (e.key === "ArrowLeft") { flipperLeft.angle = 0; }
+      if (e.key === "ArrowRight") { flipperRight.angle = 0; }
+    });
+
+    // Iniciar juego de pinball
+    gameLoop();
+  </script>
+</body>
+</html>
